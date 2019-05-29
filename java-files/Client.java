@@ -1,5 +1,6 @@
 import com.googlecode.lanterna.input.KeyStroke;
 import com.googlecode.lanterna.input.KeyType;
+import com.googlecode.lanterna.terminal.ansi.UnixTerminal;
 import com.googlecode.lanterna.terminal.swing.SwingTerminalFrame;
 import org.json.JSONObject;
 
@@ -17,7 +18,18 @@ import javax.swing.*;
 public class Client {
   // Mainmetoden exekveras för att köra klienten.
   public static void main(String[] args) throws IOException {
-    Client client = new Client();
+    Client client;
+
+    if (args.length > 0) {
+      try {
+        client = new Client(args[0]);
+      } catch (UnknownHostException e) {
+        System.out.println("Unknown host. Defaulting to localhost.");
+        client = new Client();
+      }
+    } else {
+      client = new Client();
+    }
 
     try {
       // Starta klientens process.
@@ -60,18 +72,27 @@ public class Client {
 
   private Socket clientSocket;
   private Terminal terminal;
+  private InetSocketAddress serverAddress;
 
-  // Skapar en klient med en null server och null terminal.
+  // Skapar en klient med en null server och null terminal med localhost som serveradress.
   public Client() {
     clientSocket = new Socket();
     terminal = null;
+    serverAddress = new InetSocketAddress("localhost", 1337);
+  }
+
+  // Skapar en klient med en null server och null terminal med angiven serveradress.
+  public Client(String serverAddressString) throws UnknownHostException {
+    clientSocket = new Socket();
+    terminal = null;
+    serverAddress = new InetSocketAddress(InetAddress.getByName(serverAddressString), 1337);
   }
 
   // Spelar spelet genom att skicka till och ta emot från servern och skriva ut spelplanen.
   public void play() throws Exception {
     int timeout = 60000; // Sätt en timeout på 60 sekunder.
     // Öppna en socket till serverns IP-adress och port 1337.
-    clientSocket.connect(new InetSocketAddress("localhost", 1337), timeout);
+    clientSocket.connect(serverAddress, timeout);
     // Skapa en utdataström för att skriva till servern och en indataström för att ta emot från severn.
     DataOutputStream toServer = new DataOutputStream(clientSocket.getOutputStream());
     BufferedReader fromServer = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
@@ -82,7 +103,9 @@ public class Client {
     terminal.enterPrivateMode();
     terminal.clearScreen();
     terminal.setCursorVisible(false);
-    ((SwingTerminalFrame) terminal).setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    if (terminal instanceof SwingTerminalFrame) {
+      ((SwingTerminalFrame) terminal).setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    }
 
     // Loopen som håller igång send/receive-processen.
     while (true) {
@@ -147,6 +170,9 @@ public class Client {
     while (terminal.pollInput() != null);
     while (!inputIsCorrect(input)) {
       input = terminal.readInput();
+      if (input.equals(new KeyStroke(KeyType.Escape))) {
+        System.exit(0);
+      }
     }
 
     // Formattera svaret och returnera det.
